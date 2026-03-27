@@ -207,6 +207,17 @@ class HubX(Hub):
         merged.extend(standalone)
         return [dict_to_environment_sensor(s, self) for s in merged]
 
+    def get_environment_sensor_by_id(self, id_: str) -> EnvironmentSensor:
+        """
+        Fetches an environment sensor by ID, with relationId merging for split-device sensors.
+        """
+        # Use the full get_environment_sensors() to get merged results
+        sensors = self.get_environment_sensors()
+        for sensor in sensors:
+            if sensor.id == id_:
+                return sensor
+        raise ValueError(f"No environment sensor found with id {id_}")
+
     def get_motion_sensors(self) -> List[MotionSensorX]:
         """
         Fetches all motion sensors registered in the Hub.

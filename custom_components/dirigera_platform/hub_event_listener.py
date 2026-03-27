@@ -497,18 +497,38 @@ class hub_event_listener(threading.Thread):
                 return
 
             if id not in hub_event_listener.device_registry:
-                # For electricalSensor events (split-device plugs like GRILLPLATS/TOFSMYGGA):
-                # The sensor device ID ends with _2, but the outlet is registered as _1.
-                # Route energy events to the parent outlet entity.
+                # Split-device routing: try to find parent entity for unregistered devices
+                routed = False
+
+                # For electricalSensor events (GRILLPLATS/TOFSMYGGA _2 -> _1)
                 if device_type == "electricalSensor" and id.endswith("_2"):
                     outlet_id = id[:-2] + "_1"
                     if outlet_id in hub_event_listener.device_registry:
                         logger.debug(f"Routing electricalSensor {id} events to outlet {outlet_id}")
                         id = outlet_id
-                    else:
-                        logger.debug(f"electricalSensor {id}: no matching outlet {outlet_id} found")
-                        return
-                else:
+                        routed = True
+
+                # For split-device environmentSensors (TIMMERFLOTTE: temp + humidity)
+                # Try _1 suffix pattern first, then search by relationId prefix
+                if not routed and device_type == "environmentSensor":
+                    # Try _1/_2 suffix pattern
+                    if id.endswith("_2"):
+                        sibling_id = id[:-2] + "_1"
+                        if sibling_id in hub_event_listener.device_registry:
+                            logger.debug(f"Routing environmentSensor {id} events to sibling {sibling_id}")
+                            id = sibling_id
+                            routed = True
+                    # Try finding any registered device sharing the same base ID (relationId)
+                    if not routed:
+                        base_id = id.rsplit("_", 1)[0] if "_" in id else id
+                        for reg_id in hub_event_listener.device_registry:
+                            if reg_id.startswith(base_id) and reg_id != id:
+                                logger.debug(f"Routing environmentSensor {id} events to related {reg_id}")
+                                id = reg_id
+                                routed = True
+                                break
+
+                if not routed:
                     # Unknown device - try to discover it
                     if self._discovery_coordinator is not None:
                         logger.info(f"Unknown device detected: {id} (type: {device_type}), triggering discovery")
