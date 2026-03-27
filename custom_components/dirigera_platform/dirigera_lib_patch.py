@@ -5,6 +5,7 @@ from dirigera import Hub
 
 from dirigera.devices.device import Attributes, Device
 from dirigera.devices.outlet import Outlet, OutletAttributes, dict_to_outlet
+from dirigera.devices.environment_sensor import EnvironmentSensor, dict_to_environment_sensor
 from dirigera.hub.abstract_smart_home_hub import AbstractSmartHomeHub
 from dirigera.devices.scene import Info, Icon,  SceneType, Trigger, TriggerDetails, ControllerType
 import logging
@@ -153,6 +154,58 @@ class HubX(Hub):
                 if rel_id and rel_id in outlets:
                     sensor_to_outlet[d["id"]] = outlets[rel_id]
         return sensor_to_outlet
+
+    def get_environment_sensors(self) -> list:
+        """
+        Fetches all environment sensors registered in the Hub.
+        For split-device sensors (TIMMERFLOTTE), merges attributes from
+        multiple devices sharing the same relationId into a single sensor.
+        TIMMERFLOTTE exposes temperature and humidity as separate devices.
+        """
+        devices = self.get("/devices")
+        env_sensors = list(filter(
+            lambda x: x.get("deviceType") == "environmentSensor", devices
+        ))
+
+        if not env_sensors:
+            return []
+
+        # Group by relationId to find split-device sensors
+        by_relation = {}
+        standalone = []
+        for sensor in env_sensors:
+            rel_id = sensor.get("relationId")
+            if rel_id:
+                if rel_id not in by_relation:
+                    by_relation[rel_id] = []
+                by_relation[rel_id].append(sensor)
+            else:
+                standalone.append(sensor)
+
+        merged = []
+
+        # Merge split-device sensors
+        for rel_id, group in by_relation.items():
+            if len(group) == 1:
+                merged.append(group[0])
+            else:
+                # Multiple devices with same relationId — merge attributes
+                base = group[0].copy()
+                base_attrs = base.get("attributes", {})
+                for other in group[1:]:
+                    other_attrs = other.get("attributes", {})
+                    for key, value in other_attrs.items():
+                        if key not in base_attrs or base_attrs[key] is None:
+                            base_attrs[key] = value
+                base["attributes"] = base_attrs
+                logger.debug(
+                    f"Merged {len(group)} environment sensor devices for "
+                    f"'{base_attrs.get('customName', '?')}' (relationId: {rel_id})"
+                )
+                merged.append(base)
+
+        merged.extend(standalone)
+        return [dict_to_environment_sensor(s, self) for s in merged]
 
     def get_motion_sensors(self) -> List[MotionSensorX]:
         """
