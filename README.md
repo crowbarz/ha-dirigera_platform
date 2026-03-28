@@ -1,20 +1,23 @@
 ## IKEA Dirigera Hub Integration
 
-This is a fork of [sanjoyg/dirigera_platform](https://github.com/sanjoyg/dirigera_platform), which was stagnant for a while, but the upstream maintainer resumed working on it, so I recommend to switch back to the upstream repository by SanjoyG. I will keep this respository up and may or may not continue working on it separately from the upstream repo and will post PR requests upstream when I add or improve things. 
+This is an actively maintained fork of [sanjoyg/dirigera_platform](https://github.com/sanjoyg/dirigera_platform).
 
 This integration connects Home Assistant with the IKEA Dirigera hub, built on the [dirigera](https://github.com/Leggin/dirigera) Python library by Nicolas Hilberg.
 
-This fork addresses most of the outstanding issues from the upstream repository. Contributions are welcome — feel free to open [issues](https://github.com/nrbrt/dirigera_platform/issues) or submit pull requests.
-
-Should the upstream repository become active again, I reccommend reverting back. In the meantime, I will try to answer questions and update things in my fork, while filing PRs upstream of all changes I make, just in case the upstream maintainer resurfaces and wants to continue working on it.
+Contributions are welcome — feel free to open [issues](https://github.com/nrbrt/dirigera_platform/issues) or submit pull requests. Device data dumps are especially helpful for adding support for new devices.
 
 ### Supported Devices
 * Lights (including RGBWW with dynamic color mode switching)
 * Outlets (with energy monitoring)
+  * INSPELNING — single-device, energy attributes built-in
+  * GRILLPLATS / TOFSMYGGA — split-device, outlet + energy sensor auto-merged ([#17](https://github.com/nrbrt/dirigera_platform/issues/17))
 * Open/Close Sensors (PARASOLL, MYGGBETT)
 * Motion Sensors (VALLHORN, MYGGSPRAY)
 * Light Sensors (MYGGSPRAY illuminance)
-* Environment Sensors (VINDSTYRKA, ALPSTUGA including CO2)
+* Environment Sensors
+  * VINDSTYRKA — air quality (temperature, humidity, PM2.5, VOC)
+  * ALPSTUGA — air quality (including CO2)
+  * TIMMERFLOTTE — temperature + humidity, split-device auto-merged ([#14](https://github.com/nrbrt/dirigera_platform/issues/14))
 * FYRTUR/KADRILJ Blinds
 * STYRBAR / RODRET / SOMRIG Remotes - with automation events
 * AirPurifier / STARKVIND
@@ -46,6 +49,14 @@ Should the upstream repository become active again, I reccommend reverting back.
 - Upgraded dirigera library from 1.2.1 to 1.2.6
 - Uses native library classes for `EnvironmentSensor` (CO2 support) and `LightSensor` (illuminance) instead of custom patches
 - Custom patches remain only where needed: `MotionSensorX` (combined motionSensor/occupancySensor), `ControllerX`, `HackScene`
+
+**Split-Device Support** (v0.2.0)
+- IKEA's newer Matter-based devices (GRILLPLATS, TOFSMYGGA, TIMMERFLOTTE) expose as multiple devices in the Dirigera API, linked by `relationId`
+- The integration automatically detects and merges split-device pairs into single entities
+- GRILLPLATS/TOFSMYGGA: outlet (on/off) + electricalSensor (voltage, current, power, energy) → single outlet with energy monitoring
+- TIMMERFLOTTE: two environmentSensors (temperature + humidity) → single sensor with both measurements
+- WebSocket events from split-device siblings are routed to the merged entity for real-time updates
+- Periodic sensor updates preserve merged attributes (prevents "unknown" state after reload)
 
 **Additional Fixes**
 - Device reachability: devices now correctly show as unavailable when offline ([#147](https://github.com/sanjoyg/dirigera_platform/issues/147))
