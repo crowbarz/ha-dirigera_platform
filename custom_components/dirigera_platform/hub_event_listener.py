@@ -170,7 +170,9 @@ class hub_event_listener(threading.Thread):
         for device_id, registry_entry in hub_event_listener.device_registry.items():
             try:
                 entity = registry_entry.entity
-                if hasattr(entity, '_json_data') and entity._json_data.room is not None:
+                if not hasattr(entity, '_json_data'):
+                    continue
+                if entity._json_data.room is not None:
                     room_name = entity._json_data.room.name
                     identifier = entity._json_data.relation_id or entity._json_data.id
                     await self._update_device_area(identifier, room_name)
