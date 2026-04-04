@@ -157,16 +157,17 @@ class hub_event_listener(threading.Thread):
 
             # Skip if user has set a custom name in HA (unless force=True)
             if not force and device_entry.name_by_user is not None:
-                logger.debug(f"Device {device_id} has user-set name, skipping automatic name update")
+                logger.debug(f"Device {device_id} has user-set name '{device_entry.name_by_user}', skipping")
                 return
 
             # Only update if the name actually changed
             current_name = device_entry.name_by_user or device_entry.name
             if current_name == new_name:
+                logger.debug(f"Device {device_id} name already matches '{new_name}'")
                 return
 
             # Update the device's name
-            logger.info(f"Updating device {device_id} name to {new_name}")
+            logger.info(f"Updating device {device_id} name: '{current_name}' -> '{new_name}' (name_by_user={device_entry.name_by_user})")
             if device_entry.name_by_user is not None:
                 # Clear user-set name and update integration name
                 device_reg.async_update_device(device_entry.id, name=new_name, name_by_user=None)
@@ -181,22 +182,29 @@ class hub_event_listener(threading.Thread):
         This should be called at startup after all entities are registered,
         to ensure HA device names match Dirigera names (set via IKEA app).
         """
-        logger.info("Starting device name sync from Dirigera")
+        logger.info("Starting device name sync from Dirigera (%d registry entries)", len(hub_event_listener.device_registry))
         synced_count = 0
+        seen_identifiers = set()
         for device_id, registry_entry in hub_event_listener.device_registry.items():
             try:
                 entity = registry_entry.entity
                 if not hasattr(entity, '_json_data'):
+                    logger.debug(f"Name sync: skipping {device_id} - no _json_data")
                     continue
                 custom_name = entity._json_data.attributes.custom_name
                 if not custom_name:
+                    logger.debug(f"Name sync: skipping {device_id} - no custom_name")
                     continue
                 identifier = entity._json_data.relation_id or entity._json_data.id
+                if identifier in seen_identifiers:
+                    continue
+                seen_identifiers.add(identifier)
+                logger.debug(f"Name sync: {identifier} -> custom_name='{custom_name}'")
                 await self._update_device_name(identifier, custom_name, force=True)
                 synced_count += 1
             except Exception as ex:
                 logger.error(f"Failed to sync name for device {device_id}: {ex}")
-        logger.info(f"Device name sync complete, processed {synced_count} devices")
+        logger.info(f"Device name sync complete, synced {synced_count} devices")
 
     async def sync_all_device_areas(self):
         """Sync all device areas from Dirigera room info to HA device registry.
