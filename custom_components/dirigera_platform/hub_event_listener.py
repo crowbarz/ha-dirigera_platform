@@ -191,16 +191,18 @@ class hub_event_listener(threading.Thread):
                 if not hasattr(entity, '_json_data'):
                     logger.debug(f"Name sync: skipping {device_id} - no _json_data")
                     continue
-                custom_name = entity._json_data.attributes.custom_name
-                if not custom_name:
-                    logger.debug(f"Name sync: skipping {device_id} - no custom_name")
-                    continue
                 identifier = entity._json_data.relation_id or entity._json_data.id
                 if identifier in seen_identifiers:
                     continue
                 seen_identifiers.add(identifier)
-                logger.debug(f"Name sync: {identifier} -> custom_name='{custom_name}'")
-                await self._update_device_name(identifier, custom_name, force=True)
+                # Use device_name (consistent for split-devices) rather than
+                # individual custom_name which can differ between sub-devices
+                device_name = entity.device_name if hasattr(entity, 'device_name') else entity._json_data.attributes.custom_name
+                if not device_name:
+                    logger.debug(f"Name sync: skipping {device_id} - no name")
+                    continue
+                logger.debug(f"Name sync: {identifier} -> device_name='{device_name}'")
+                await self._update_device_name(identifier, device_name, force=True)
                 synced_count += 1
             except Exception as ex:
                 logger.error(f"Failed to sync name for device {device_id}: {ex}")

@@ -101,11 +101,31 @@ class ikea_base_device:
         return self._json_data.id
 
     @property
+    def device_name(self) -> str:
+        """Return a consistent device name for split-devices.
+        For devices with relation_id, all sub-devices should report the same
+        device name. Uses the first non-empty custom_name found among siblings."""
+        if self._json_data.relation_id:
+            # Collect all custom_names for this relation_id from registered entities
+            names = []
+            for reg_entry in hub_event_listener.device_registry.values():
+                sibling = reg_entry.entity
+                if (hasattr(sibling, '_json_data')
+                        and sibling._json_data.relation_id == self._json_data.relation_id
+                        and sibling._json_data.attributes.custom_name):
+                    names.append(sibling._json_data.attributes.custom_name)
+            if names:
+                return names[0]
+        if self._json_data.attributes.custom_name:
+            return self._json_data.attributes.custom_name
+        return self.unique_id
+
+    @property
     def device_info(self) -> DeviceInfo:
 
         return DeviceInfo(
             identifiers={("dirigera_platform", self.device_identifier)},
-            name=self.name,
+            name=self.device_name,
             manufacturer=self._json_data.attributes.manufacturer,
             model=self._json_data.attributes.model,
             sw_version=self._json_data.attributes.firmware_version,
