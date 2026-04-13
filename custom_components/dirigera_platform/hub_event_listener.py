@@ -1,3 +1,4 @@
+import asyncio
 import threading
 import logging 
 import time 
@@ -101,6 +102,7 @@ class hub_event_listener(threading.Thread):
         self._hub : Hub = hub
         self._request_to_stop = False
         self._hass = hass
+        self._loop = asyncio.get_event_loop()
         self._discovery_coordinator = discovery_coordinator
 
     async def _update_device_area(self, device_id: str, room_name: str):
@@ -503,7 +505,7 @@ class hub_event_listener(threading.Thread):
                     if device_type and self._discovery_coordinator is not None:
                         logger.info(f"Device added event received: {device_id} (type: {device_type})")
                         # Schedule discovery on the main event loop
-                        self._hass.loop.call_soon_threadsafe(
+                        self._loop.call_soon_threadsafe(
                             lambda did=device_id, dt=device_type: self._hass.async_create_task(
                                 self._discovery_coordinator.discover_device(did, dt)
                             )
@@ -583,7 +585,7 @@ class hub_event_listener(threading.Thread):
                     # Unknown device - try to discover it
                     if self._discovery_coordinator is not None:
                         logger.info(f"Unknown device detected: {id} (type: {device_type}), triggering discovery")
-                        self._hass.loop.call_soon_threadsafe(
+                        self._loop.call_soon_threadsafe(
                             lambda: self._hass.async_create_task(
                                 self._discovery_coordinator.discover_device(id, device_type)
                             )
@@ -625,7 +627,7 @@ class hub_event_listener(threading.Thread):
                         # This handles the case where HA restarts and the room is already set in _json_data
                         # but not yet in the HA device registry
                         try:
-                            self._hass.loop.call_soon_threadsafe(
+                            self._loop.call_soon_threadsafe(
                                 lambda room=new_room.name, device_id=(entity._json_data.relation_id or id): self._hass.async_create_task(
                                     self._update_device_area(device_id, room)
                                 )
@@ -638,7 +640,7 @@ class hub_event_listener(threading.Thread):
                         entity._json_data.room = None
                         room_changed = True
                         try:
-                            self._hass.loop.call_soon_threadsafe(
+                            self._loop.call_soon_threadsafe(
                                 lambda device_id=(entity._json_data.relation_id or id): self._hass.async_create_task(
                                     self._update_device_area(device_id, "")
                                 )
@@ -710,7 +712,7 @@ class hub_event_listener(threading.Thread):
                 # Update HA device registry name if customName changed
                 if name_changed and new_name is not None:
                     try:
-                        self._hass.loop.call_soon_threadsafe(
+                        self._loop.call_soon_threadsafe(
                             lambda name=new_name, device_id=(entity._json_data.relation_id or id): self._hass.async_create_task(
                                 self._update_device_name(device_id, name)
                             )
