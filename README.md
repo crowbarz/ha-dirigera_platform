@@ -33,7 +33,7 @@ Contributions are welcome — feel free to open [issues](https://github.com/nrbr
 
 ## Requirements
 
-- Home Assistant 2024.12 or newer
+- Home Assistant 2026.1 or newer (v0.2.6 and earlier work with HA 2024.12+)
 - IKEA Dirigera hub on your local network
 - HACS installed
 
@@ -73,6 +73,7 @@ See [Releases](https://github.com/nrbrt/dirigera_platform/releases) for a full c
 
 ### Recent
 
+- **v0.2.7** (2026-04-13) — Fix: replace deprecated `hass.loop` with `asyncio.get_event_loop()` (HA 2026.1+ compatibility)
 - **v0.2.6** (2026-04-04) — BILRESA dual button support; consistent device naming for split-devices
 - **v0.2.5** (2026-04-04) — Split-device plug support (GRILLPLATS, TOFSMYGGA)
 - **v0.2.0** (2026-03-27) — Split-device merging framework; TIMMERFLOTTE support
