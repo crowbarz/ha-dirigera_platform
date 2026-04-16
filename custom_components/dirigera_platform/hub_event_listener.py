@@ -104,6 +104,8 @@ class hub_event_listener(threading.Thread):
         self._hass = hass
         self._loop = asyncio.get_event_loop()
         self._discovery_coordinator = discovery_coordinator
+        self._wsapp = None
+        self._session_started_at = None
 
     async def _update_device_area(self, device_id: str, room_name: str):
         """Update the device's area in Home Assistant's device registry if needed."""
@@ -780,6 +782,23 @@ class hub_event_listener(threading.Thread):
             logger.debug(f"{ws_msg}")
             logger.debug(ex)
 
+    def _on_close(self, ws, close_status_code, close_msg):
+        # Log cleanly when the hub closes the WebSocket. Dirigera sends
+        # status 1000 with message "disconnected due to inactivity" when
+        # it drops idle connections — this makes that visible at INFO level.
+        session_duration = None
+        if self._session_started_at is not None:
+            session_duration = time.time() - self._session_started_at
+        logger.info(
+            f"Dirigera WebSocket closed (code={close_status_code}, msg={close_msg}, "
+            f"session_duration={session_duration:.0f}s" if session_duration is not None
+            else f"Dirigera WebSocket closed (code={close_status_code}, msg={close_msg})"
+        )
+
+    def _on_open(self, ws):
+        self._session_started_at = time.time()
+        logger.info("Dirigera WebSocket opened")
+
     def create_listener(self):
         try:
             logger.info("Starting dirigera hub event listener")
@@ -787,9 +806,13 @@ class hub_event_listener(threading.Thread):
                 self._hub.websocket_base_url,
                 header={"Authorization": f"Bearer {self._hub.token}"},
                 on_message=self.on_message,
-                on_error=self.on_error)
+                on_error=self.on_error,
+                on_open=self._on_open,
+                on_close=self._on_close)
             # ping_interval sends WebSocket ping frames to keep the connection alive.
             # Without this, the Dirigera hub disconnects after ~5 minutes of inactivity.
+            # Note: some Dirigera firmware versions still disconnect after ~1-2 hours
+            # even with pings — the hub's inactivity timer ignores ping frames.
             self._wsapp.run_forever(
                 sslopt={"cert_reqs": ssl.CERT_NONE},
                 ping_interval=30,
@@ -814,10 +837,14 @@ class hub_event_listener(threading.Thread):
 
     def run(self):
         while True:
-            # Blocking call
+            # Blocking call — returns when the WebSocket connection ends
+            # (either clean close from hub, our stop() call, or exception).
             self.create_listener()
             logger.debug("Listener thread complete...")
             if self._request_to_stop:
                 break
-            logger.warn("Failed to create listener or listener exited, will sleep 10 seconds before retrying")
+            # Previously this message lied — it said "will sleep 10 seconds"
+            # but the code did not actually sleep. Fixed to honor the message.
+            logger.warn("Failed to create listener or listener exited, sleeping 10 seconds before retrying")
+            time.sleep(10)
             time.sleep(10)
