@@ -97,6 +97,17 @@ class hub_event_listener(threading.Thread):
             return None 
         return hub_event_listener.device_registry[id]
     
+    # Dirigera hubs disconnect WebSocket clients after ~60 minutes of
+    # "inactivity". Crucially, the hub does NOT count WebSocket protocol-level
+    # ping frames (opcode 0x9) as activity — only application-level data
+    # frames reset the timer. Setups with environment sensors (VINDSTYRKA,
+    # ALPSTUGA) never hit this because they generate continuous events.
+    # Setups with only door/window sensors or plugs go silent between state
+    # changes and get disconnected.
+    #
+    # Fix: send a minimal application-level text frame every 25 minutes.
+    KEEPALIVE_INTERVAL = 25 * 60  # seconds
+
     def __init__(self, hub : Hub, hass, discovery_coordinator=None):
         super().__init__()
         self._hub : Hub = hub
@@ -106,6 +117,7 @@ class hub_event_listener(threading.Thread):
         self._discovery_coordinator = discovery_coordinator
         self._wsapp = None
         self._session_started_at = None
+        self._keepalive_timer = None
 
     async def _update_device_area(self, device_id: str, room_name: str):
         """Update the device's area in Home Assistant's device registry if needed."""
@@ -782,6 +794,35 @@ class hub_event_listener(threading.Thread):
             logger.debug(f"{ws_msg}")
             logger.debug(ex)
 
+    def _send_keepalive(self):
+        """Send an application-level text frame to reset the hub's inactivity timer."""
+        if self._wsapp and not self._request_to_stop:
+            try:
+                self._wsapp.send("")
+                logger.debug("WebSocket application-level keepalive sent")
+            except Exception as ex:
+                logger.debug(f"WebSocket keepalive failed: {ex}")
+        if not self._request_to_stop:
+            self._keepalive_timer = threading.Timer(
+                self.KEEPALIVE_INTERVAL, self._send_keepalive)
+            self._keepalive_timer.daemon = True
+            self._keepalive_timer.start()
+
+    def _start_keepalive(self):
+        """Start the periodic keepalive timer."""
+        self._stop_keepalive()
+        self._keepalive_timer = threading.Timer(
+            self.KEEPALIVE_INTERVAL, self._send_keepalive)
+        self._keepalive_timer.daemon = True
+        self._keepalive_timer.start()
+        logger.debug(f"WebSocket keepalive timer started ({self.KEEPALIVE_INTERVAL}s interval)")
+
+    def _stop_keepalive(self):
+        """Cancel the keepalive timer if running."""
+        if self._keepalive_timer:
+            self._keepalive_timer.cancel()
+            self._keepalive_timer = None
+
     def _on_close(self, ws, close_status_code, close_msg):
         # Log cleanly when the hub closes the WebSocket. Dirigera sends
         # status 1000 with message "disconnected due to inactivity" when
@@ -798,6 +839,7 @@ class hub_event_listener(threading.Thread):
     def _on_open(self, ws):
         self._session_started_at = time.time()
         logger.info("Dirigera WebSocket opened")
+        self._start_keepalive()
 
     def create_listener(self):
         try:
@@ -820,6 +862,8 @@ class hub_event_listener(threading.Thread):
         except Exception as ex:
             logger.error("Error creating event listener...")
             logger.error(ex)
+        finally:
+            self._stop_keepalive()
 
     def stop(self):
         logger.info("Listener request for stop..")
