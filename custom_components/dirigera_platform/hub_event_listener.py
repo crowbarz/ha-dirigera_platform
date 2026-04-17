@@ -106,7 +106,7 @@ class hub_event_listener(threading.Thread):
     # changes and get disconnected.
     #
     # Fix: send a minimal application-level text frame every 25 minutes.
-    KEEPALIVE_INTERVAL = 25 * 60  # seconds
+    KEEPALIVE_INTERVAL = 15 * 60  # seconds — well below the hub's ~60 min timeout
 
     def __init__(self, hub : Hub, hass, discovery_coordinator=None):
         super().__init__()
@@ -795,13 +795,18 @@ class hub_event_listener(threading.Thread):
             logger.debug(ex)
 
     def _send_keepalive(self):
-        """Send an application-level text frame to reset the hub's inactivity timer."""
+        """Send an application-level text frame to reset the hub's inactivity timer.
+
+        An empty string may be ignored by the hub as a zero-length frame.
+        Send a minimal JSON message instead — if the hub rejects it, the
+        WebSocket stays open (it's not a protocol error, just an unknown message).
+        """
         if self._wsapp and not self._request_to_stop:
             try:
-                self._wsapp.send("")
-                logger.debug("WebSocket application-level keepalive sent")
+                self._wsapp.send('{"type":"ping"}')
+                logger.info("WebSocket keepalive sent")
             except Exception as ex:
-                logger.debug(f"WebSocket keepalive failed: {ex}")
+                logger.warning(f"WebSocket keepalive failed: {ex}")
         if not self._request_to_stop:
             self._keepalive_timer = threading.Timer(
                 self.KEEPALIVE_INTERVAL, self._send_keepalive)
@@ -815,7 +820,7 @@ class hub_event_listener(threading.Thread):
             self.KEEPALIVE_INTERVAL, self._send_keepalive)
         self._keepalive_timer.daemon = True
         self._keepalive_timer.start()
-        logger.debug(f"WebSocket keepalive timer started ({self.KEEPALIVE_INTERVAL}s interval)")
+        logger.info(f"WebSocket keepalive timer started ({self.KEEPALIVE_INTERVAL}s interval)")
 
     def _stop_keepalive(self):
         """Cancel the keepalive timer if running."""
