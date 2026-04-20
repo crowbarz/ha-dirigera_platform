@@ -73,7 +73,8 @@ See [Releases](https://github.com/nrbrt/dirigera_platform/releases) for a full c
 
 ### Recent
 
-- **v0.2.11** (2026-04-17) — Fix: application-level WebSocket keepalive to prevent Dirigera hub "disconnected due to inactivity" (issue #12)
+- **v0.2.13** (2026-04-20) — Fix: split-device entity naming — secondary entities (e.g. MYGGSPRAY illuminance) now inherit the user-configured name from the primary entity
+- **v0.2.11/12** (2026-04-17) — Fix: application-level WebSocket keepalive to prevent Dirigera hub "disconnected due to inactivity" (issue #12)
 - **v0.2.10** (2026-04-16) — Fix: honor 10s sleep between listener reconnects; add on_open/on_close diagnostics for WebSocket disconnect debugging
 - **v0.2.9** (2026-04-15) — Feature: light device triggers — turned_on/turned_off automations (upstream PR #197)
 - **v0.2.8** (2026-04-15) — Fix: `ikea_bulb_device_set` registry_entry registration (upstream PR #196)

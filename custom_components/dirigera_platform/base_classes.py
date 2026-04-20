@@ -134,16 +134,19 @@ class ikea_base_device:
 
     @property
     def name(self):
+        # For split-devices (same relation_id), prefer a sibling's user-configured
+        # name over our own default name. The IKEA app only lets users rename the
+        # "primary" device (e.g. occupancySensor), not the secondary (lightSensor).
+        # Without this, the secondary keeps its factory default name.
+        if self._json_data.relation_id:
+            for reg_entry in hub_event_listener.device_registry.values():
+                sibling = reg_entry.entity
+                if (hasattr(sibling, '_json_data')
+                        and sibling._json_data.relation_id == self._json_data.relation_id
+                        and sibling._json_data.id != self._json_data.id
+                        and sibling._json_data.attributes.custom_name):
+                    return sibling._json_data.attributes.custom_name
         if self._json_data.attributes.custom_name is None or len(self._json_data.attributes.custom_name) == 0:
-            # For sub-devices with relation_id, try to get name from a sibling
-            if self._json_data.relation_id:
-                for reg_entry in hub_event_listener.device_registry.values():
-                    sibling = reg_entry.entity
-                    if (hasattr(sibling, '_json_data')
-                            and sibling._json_data.relation_id == self._json_data.relation_id
-                            and sibling._json_data.id != self._json_data.id
-                            and sibling._json_data.attributes.custom_name):
-                        return sibling._json_data.attributes.custom_name
             return self.unique_id
         return self._json_data.attributes.custom_name
             
